@@ -1,0 +1,74 @@
+1. Authentication (User Routes)
+Register User
+
+Route: POST /api/users/register
+
+Access: Public
+
+Input (req.body): { "name": "...", "email": "...", "password": "..." }
+
+Output (Response): { "_id": "...", "name": "...", "email": "...", "role": "member", "token": "eyJhbG..." }
+
+Login User
+
+Route: POST /api/users/login
+
+Access: Public
+
+Input (req.body): { "email": "...", "password": "..." }
+
+Output (Response): { "_id": "...", "name": "...", "email": "...", "role": "member", "token": "eyJhbG..." }
+
+2. Timetable (Lesson Routes)
+Get All Lessons (Timetable)
+
+Route: GET /api/lessons
+
+Access: Public
+
+Input: None
+
+Output (Response): Array of objects [ { "_id": "...", "day": "Monday", "timeSlot": "09:00 AM", "exercise": { "name": "Yoga", "duration": 60 } } ]
+
+3. Bookings (Member Routes)
+Book a Lesson
+
+Route: POST /api/bookings
+
+Access: Private (Requires Header: Authorization: Bearer <token>)
+
+Input (req.body): { "lessonId": "..." }
+
+Output (Response): { "message": "Class booked successfully", "booking": { ... } }
+
+View My Bookings
+
+Route: GET /api/bookings/my-bookings
+
+Access: Private (Requires Header: Authorization: Bearer <token>)
+
+Input: None
+
+Output (Response): Array of user's bookings [ { "_id": "...", "lesson": { "day": "...", "timeSlot": "...", "exercise": { "name": "..." } } } ]
+
+4. Feedback (Review Routes)
+Add a Review
+
+Route: POST /api/reviews
+
+Access: Private (Requires Header: Authorization: Bearer <token>)
+
+Input (req.body): { "lessonId": "...", "rating": 5, "comment": "Great class!" }
+
+Output (Response): { "message": "Thank you! Your review has been submitted.", "review": { ... } }
+
+5. Management (Admin Routes)
+Get Attendance & Ratings Report
+
+Route: GET /api/reports/attendance
+
+Access: Admin Only (Requires Header: Authorization: Bearer <admin_token>)
+
+Input: None
+
+Output (Response): { "message": "Attendance and Rating Report", "report": [ { "lessonId": "...", "exerciseName": "Yoga", "schedule": "Monday - 09:00 AM", "totalMembersRegistered": 12, "averageRating": 4.5 } ] }
