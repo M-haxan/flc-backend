@@ -101,4 +101,49 @@ router.get('/my-bookings', protect, async (req, res) => {
         res.status(500).json({ message: "Server Error while fetching your bookings" });
     }
 });
+router.delete('/:id', protect, async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) return res.status(404).json({ message: "Booking nahi mili" });
+
+        // Security: Sirf wahi user delete kare jiski booking hai
+        if (booking.user.toString() !== req.user.userId) {
+            return res.status(403).json({ message: "Aap kisi aur ki booking delete nahi kar sakte!" });
+        }
+
+        await Booking.findByIdAndDelete(req.params.id);
+        res.json({ message: "Booking successfully cancel ho gayi!" });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error" });
+    }
+});
+
+// 2. SWAP/CHANGE BOOKING (Nayi Requirement ✅)
+// Route: PUT /api/bookings/:id
+router.put('/:id', protect, async (req, res) => {
+    try {
+        const { newLessonId } = req.body;
+        const bookingId = req.params.id;
+
+        // 1. Naya lesson dhoondo aur check karo jagah hai?
+        const newLesson = await Lesson.findById(newLessonId);
+        const count = await Booking.countDocuments({ lesson: newLessonId });
+        if (count >= 4) return res.status(400).json({ message: "Nayi class full hai!" });
+
+        // 2. Conflict check (Purani booking ko chor kar)
+        const userBookings = await Booking.find({ user: req.user.userId, _id: { $ne: bookingId } }).populate('lesson');
+        const hasConflict = userBookings.some(b => 
+            b.lesson.day === newLesson.day && b.lesson.timeSlot === newLesson.timeSlot
+        );
+        if (hasConflict) return res.status(400).json({ message: "Time conflict! Nayi class ke waqt aapki pehle hi ek class hai." });
+
+        // 3. Update kar do
+        const updatedBooking = await Booking.findByIdAndUpdate(bookingId, { lesson: newLessonId }, { new: true });
+        res.json({ message: "Booking successfully change ho gayi!", updatedBooking });
+    } catch (error) {
+        res.status(500).json({ message: "Change karne mein masla aya" });
+    }
+});
+// Route: DELETE /api/lessons/:id
+
 module.exports = router;

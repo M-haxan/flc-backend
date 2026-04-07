@@ -2,13 +2,14 @@
 const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
+const cors = require('cors');
 // 2. Apne banaye hue routes import karein
 const userRoutes = require('./routes/userRoutes'); 
 
 
 // 3. Express app initialize karein
 const app = express();
-
+app.use(cors());
 // 4. Middleware: Yeh line backend ko JSON data (jo frontend se aayega) samajhne ke qabil banati hai
 app.use(express.json());
 
