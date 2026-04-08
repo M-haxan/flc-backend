@@ -30,11 +30,9 @@ app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/lessons', require('./routes/lessonRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
-// 7. Server ko kisi Port par run karein
-if (process.env.NODE_ENV !== 'production') {
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-        console.log(`🚀 Server is running on port ${PORT}`);
-    });
-}
+// Back4App (aur kisi bhi real server) ke liye isay aese hona chahiye:
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
+});
 module.exports = app;

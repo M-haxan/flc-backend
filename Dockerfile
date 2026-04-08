@@ -1,5 +1,5 @@
 # 1. Node.js ka official aur halka version use karein
-FROM node:18-alpine
+FROM node:20-alpine
 
 # 2. Container ke andar ek folder banayen jahan code rakha jayega
 WORKDIR /app
