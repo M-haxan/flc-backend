@@ -31,7 +31,7 @@ app.use('/api/lessons', require('./routes/lessonRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 // 7. Server ko kisi Port par run karein
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
 });
