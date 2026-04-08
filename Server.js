@@ -22,6 +22,9 @@ mongoose.connect(mongouri)
 
 // 6. Routes ko App ke sath link karein
 // Jab bhi koi /api/users pe jayega, express usko userRoutes file mein bhej dega
+app.get('/', (req, res) => {
+    res.send("FLC Backend is Running Perfectly! 🚀");
+});
 app.use('/api/users', userRoutes);
 app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/lessons', require('./routes/lessonRoutes'));

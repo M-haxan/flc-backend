@@ -8,6 +8,8 @@ const Review = require('../models/Review');
 // Route:   GET /api/lessons
 // Desc:    Get all scheduled lessons for the frontend timetable
 // Access:  Public (Bina login kiye bhi log timetable dekh sakein)
+// Test route for Vercel
+
 // Route: GET /api/exercises
 router.get('/exercises', async (req, res) => {
     try {
