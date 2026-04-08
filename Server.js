@@ -5,7 +5,7 @@ require('dotenv').config();
 const cors = require('cors');
 // 2. Apne banaye hue routes import karein
 const userRoutes = require('./routes/userRoutes'); 
-
+const mongouri = process.env.MONGO_URI;
 
 // 3. Express app initialize karein
 const app = express();
@@ -15,7 +15,8 @@ app.use(express.json());
 
 // 5. MongoDB Database se connect karein
 // (Agar aapke paas local MongoDB hai toh yeh link chalega, warna MongoDB Atlas ka link aayega)
-mongoose.connect('mongodb://127.0.0.1:27017/furzefield_db')
+console.log("🔗 MERA DATABASE LINK YEH HAI:", process.env.MONGO_URI);
+mongoose.connect(mongouri)
     .then(() => console.log('✅ MongoDB Connected Successfully!'))
     .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
