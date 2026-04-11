@@ -66,7 +66,7 @@ router.post('/login', async (req, res) => {
         const token = jwt.sign(
             { userId: user._id, role: user.role }, // Payload: Hum ID aur Role token ke andar chupa rahe hain
             process.env.JWT_SECRET,                // Secret Key: Jo humne .env mein rakhi thi
-            { expiresIn: '7d' }                    // Expiry: Yeh token 7 din tak valid rahega
+            { expiresIn: '15m' }                    // Expiry: Yeh token 15 minute tak valid rahega
         );
         // 3. Agar email aur password dono sahi hain, toh success response bhej dein
         res.status(200).json({
