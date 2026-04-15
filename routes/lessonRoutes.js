@@ -112,15 +112,28 @@ router.get('/reports/attendance', protect, async (req, res) => {
         res.status(500).json({ message: "Server Error" });
     }
 });
+// Route:   GET /api/lessons
+// Desc:    Get all scheduled lessons ALONG WITH THEIR BOOKING COUNTS
 router.get('/', async (req, res) => {
     try {
-        // .find() saare lessons le aayega.
-        // .populate('exercise') lesson ke andar uski price aur name bhi le aayega.
+        // Pehle saari classes le aao
         const lessons = await Lesson.find().populate('exercise');
         
+        // 💡 NAYA LOGIC: Har class ke liye Booking collection se count dhoondo
+        const lessonsWithCounts = await Promise.all(lessons.map(async (lesson) => {
+            // Check karo ke is class (lesson._id) ki kitni bookings hain
+            const bookedCount = await Booking.countDocuments({ lesson: lesson._id });
+            
+            // Class ka asal data aur uska 'bookedCount' mila kar wapas bhejo
+            return {
+                ...lesson.toObject(), // Mongoose doc ko normal JS object banaya
+                bookedCount: bookedCount // Yeh wo cheez hai jis ka frontend intezaar kar raha tha!
+            };
+        }));
+        
         res.status(200).json({
-            count: lessons.length,
-            lessons: lessons
+            count: lessonsWithCounts.length,
+            lessons: lessonsWithCounts // Ab nayi array frontend ko bhejo
         });
     } catch (error) {
         console.error("Error fetching lessons: ", error);
