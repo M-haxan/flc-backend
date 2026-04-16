@@ -47,6 +47,50 @@ router.post('/exercises', protect, async (req, res) => {
         res.status(500).json({ message: "Server error" });
     }
 });
+// 1. DELETE EXERCISE (Exercise Delete Karna)
+// ==========================================
+router.delete('/exercises/:id', protect, async (req, res) => {
+    try {
+        // VIP Check: Sirf Admin delete kar sakta hai
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: "Access Denied!" });
+        }
+
+        // Database se exercise dhoondo aur delete kar do
+        const exerciseId = req.params.id;
+        await Exercise.findByIdAndDelete(exerciseId);
+
+        res.status(200).json({ message: "Exercise Deleted Successfully!" });
+    } catch (error) {
+        console.error("Delete Error:", error);
+        res.status(500).json({ message: "Error deleting exercise." });
+    }
+});
+// 2. UPDATE EXERCISE (Naam ya Price tabdeel karna)
+// ==========================================
+router.put('/exercises/:id', protect, async (req, res) => {
+    try {
+        // VIP Check: Sirf Admin update kar sakta hai
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: "Access Denied!" });
+        }
+
+        const exerciseId = req.params.id;
+        const { name, price } = req.body; // Frontend se naya naam aur price aayega
+
+        // Database mein exercise dhoondo aur naya data set kar do
+        const updatedExercise = await Exercise.findByIdAndUpdate(
+            exerciseId, 
+            { name: name, price: price }, 
+            { new: true } // Yeh MongoDB ko kehta hai ke update hone ke baad naya data wapas bhejo
+        );
+
+        res.status(200).json({ message: "Exercise updated successfully!", exercise: updatedExercise });
+    } catch (error) {
+        console.error("Update Error:", error);
+        res.status(500).json({ message: "Error updating exercise." });
+    }
+});
 // Route:   GET /api/lessons/reports/attendance
 // Desc:    Get detailed report (Attendance, Rating, Income)
 router.get('/reports/attendance', protect, async (req, res) => {
