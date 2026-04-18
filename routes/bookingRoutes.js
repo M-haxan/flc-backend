@@ -144,6 +144,76 @@ router.put('/:id', protect, async (req, res) => {
         res.status(500).json({ message: "Change karne mein masla aya" });
     }
 });
+
+// 3. MARK LESSON AS COMPLETE (NAYA ENDPOINT)
+// Route: POST /api/bookings/:bookingId/complete
+// Desc: Mark a lesson as completed (with time validation)
+// Access: Private
+router.post('/:bookingId/complete', protect, async (req, res) => {
+    try {
+        const bookingId = req.params.bookingId;
+        const userId = req.user.userId;
+
+        // 1. Booking dhoundo
+        const booking = await Booking.findById(bookingId).populate('lesson');
+        
+        if (!booking) {
+            return res.status(404).json({ message: "Booking not found" });
+        }
+
+        // 2. Security: Sirf sahi user hi apni booking complete kar sakta hai
+        if (booking.user.toString() !== userId) {
+            return res.status(403).json({ message: "You can only mark your own bookings as complete!" });
+        }
+
+        // 3. TIME VALIDATION: Check karein ke kya user apne lesson ke time slot ke doran hi mark kar raha hai
+        const now = new Date();
+        const lessonDate = new Date(booking.lesson.date);
+        const currentHour = now.getHours();
+        const timeSlot = booking.lesson.timeSlot;
+
+        // Check same day
+        const isSameDay = now.getFullYear() === lessonDate.getFullYear() &&
+                         now.getMonth() === lessonDate.getMonth() &&
+                         now.getDate() === lessonDate.getDate();
+
+        const isValidTime = 
+            (timeSlot === 'Morning' && currentHour >= 9 && currentHour < 11) ||
+            (timeSlot === 'Afternoon' && currentHour >= 13 && currentHour < 15) ||
+            (timeSlot === 'Evening' && currentHour >= 17 && currentHour < 19);
+
+        if (!isSameDay || !isValidTime) {
+            return res.status(403).json({ 
+                message: `You can only mark this lesson as complete during ${timeSlot} time slot!` 
+            });
+        }
+
+        // 4. IDEMPOTENT: Agar pehle se complete hai toh just return karein
+        if (booking.isCompleted) {
+            return res.status(200).json({ 
+                message: "Already completed! This is a rewatch.",
+                isRewatch: true,
+                booking: booking
+            });
+        }
+
+        // 5. MARK AS COMPLETE (First time)
+        booking.isCompleted = true;
+        booking.completedAt = new Date();
+        await booking.save();
+
+        return res.status(200).json({ 
+            message: "Lesson marked as complete! Congratulations! 🎉",
+            isRewatch: false,
+            booking: booking
+        });
+
+    } catch (error) {
+        console.error("Error marking lesson complete: ", error);
+        res.status(500).json({ message: "Server Error while marking lesson complete" });
+    }
+});
+
 // Route: DELETE /api/lessons/:id
 
 module.exports = router;

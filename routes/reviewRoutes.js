@@ -23,6 +23,11 @@ router.post('/', protect, async (req, res) => {
             return res.status(400).json({ message: "You can only review lessons that you have booked!" });
         }
 
+        // 🆕 Pro Check 1.5: Kya user ne lesson complete kiya hai?
+        if (!hasBooked.isCompleted) {
+            return res.status(403).json({ message: "You can only review lessons that you have completed!" });
+        }
+
         // 3. Pro Check 2: Kya user is lesson ka pehle review de chuka hai?
         const alreadyReviewed = await Review.findOne({ user: userId, lesson: lessonId });
         if (alreadyReviewed) {

@@ -5,6 +5,29 @@ const { protect } = require('../middleware/authMiddleware');
 const Exercise = require('../models/Exercise');
 const Booking = require('../models/Booking');
 const Review = require('../models/Review');
+// ☁️ CLOUDINARY & MULTER SETUP (NAYA)
+// ==========================================
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const multer = require('multer');
+// Apni .env file se keys utha kar Cloudinary ko do
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Multer ko batao ke video Cloudinary par 'flc_videos' folder mein rakhni hai
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'flc_videos', 
+    resource_type: 'video', // ⚠️ ZAROORI: Iske baghair Cloudinary isko tasveer (image) samajh lega
+    allowed_formats: ['mp4', 'mkv', 'mov', 'avi'] // Sirf videos allow karein
+  },
+});
+
+const upload = multer({ storage: storage });
 // Route:   GET /api/lessons
 // Desc:    Get all scheduled lessons for the frontend timetable
 // Access:  Public (Bina login kiye bhi log timetable dekh sakein)
@@ -105,7 +128,9 @@ router.get('/reports/attendance', protect, async (req, res) => {
         const reportData = await Promise.all(lessons.map(async (lesson) => {
             
             // 1. Bookings & Income calculate karein
-            const bookingCount = await Booking.countDocuments({ lesson: lesson._id });
+            const allBookings = await Booking.find({ lesson: lesson._id });
+            const bookingCount = allBookings.length;
+            const completedCount = allBookings.filter(b => b.isCompleted).length;
             const classIncome = bookingCount * lesson.exercise.price; // Paise = Log * Ticket Price
             
             // Income Tracker mein is exercise ke paise daal dein
@@ -123,6 +148,12 @@ router.get('/reports/attendance', protect, async (req, res) => {
                 avgRating = (totalStars / reviews.length).toFixed(1); 
             }
 
+            // 3. Calculate Completion Percentage
+            let completionPercentage = 0;
+            if (bookingCount > 0) {
+                completionPercentage = ((completedCount / bookingCount) * 100).toFixed(1);
+            }
+
             return {
                 lessonId: lesson._id,
                 exerciseName: lesson.exercise.name,
@@ -130,7 +161,9 @@ router.get('/reports/attendance', protect, async (req, res) => {
                 timeSlot: lesson.timeSlot,
                 date: lesson.date,
                 bookedSeats: bookingCount,
+                completedSeats: completedCount,
                 totalSeats: 4,
+                completionPercentage: completionPercentage,
                 status: bookingCount >= 4 ? 'Full' : 'Available',
                 avgRating: avgRating, // Nayi Field
                 income: classIncome   // Nayi Field
@@ -156,6 +189,46 @@ router.get('/reports/attendance', protect, async (req, res) => {
         res.status(500).json({ message: "Server Error" });
     }
 });
+
+// Route:   GET /api/lessons/:lessonId/reviews
+// Desc:    Get all reviews for a specific lesson (Admin Only)
+// Access:  Private (Admin)
+router.get('/:lessonId/reviews', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: "Access Denied!" });
+        }
+
+        const lessonId = req.params.lessonId;
+
+        // Sabhi reviews fetch karo jis lesson ke liye hain aur user ka naam bhi lao
+        const reviews = await Review.find({ lesson: lessonId })
+            .populate({
+                path: 'user',
+                select: 'name email' // Sirf naam aur email chahiye
+            })
+            .sort({ createdAt: -1 }); // Sabse nayi review pehle
+
+        // Lesson ka data bhi le aao taake admin ko context pata chal jaye
+        const lesson = await Lesson.findById(lessonId).populate('exercise');
+
+        res.status(200).json({
+            lesson: {
+                exerciseName: lesson.exercise.name,
+                day: lesson.day,
+                timeSlot: lesson.timeSlot,
+                date: lesson.date
+            },
+            reviews: reviews,
+            totalReviews: reviews.length
+        });
+
+    } catch (error) {
+        console.error("Error fetching reviews: ", error);
+        res.status(500).json({ message: "Server Error" });
+    }
+});
+
 // Route:   GET /api/lessons
 // Desc:    Get all scheduled lessons ALONG WITH THEIR BOOKING COUNTS
 router.get('/', async (req, res) => {
@@ -184,31 +257,37 @@ router.get('/', async (req, res) => {
         res.status(500).json({ message: "Server Error while fetching timetable" });
     }
 });
-router.post('/', protect, async (req, res) => {
+// Route:   POST /api/lessons
+// NAYA: 'upload.single('video')' humne raste mein guard ke tor par bitha diya hai
+router.post('/', protect, upload.single('video'), async (req, res) => {
     try {
-        // 1. VIP SECURITY: Kya yeh user waqai Admin hai? 🛑
-        // (Hamara protect middleware req.user set kar deta hai)
+        // VIP SECURITY
         if (req.user.role !== 'admin') {
             return res.status(403).json({ message: "Access Denied! Sirf Admin nayi classes bana sakta hai." });
         }
 
-        // 2. Frontend se aane wala data
         const { exerciseId, day, timeSlot, date } = req.body;
 
-        // Validation: Koi field khali toh nahi?
         if (!exerciseId || !day || !timeSlot || !date) {
             return res.status(400).json({ message: "Please provide all details (exercise, day, time, date)" });
         }
 
-        // 3. Naya Lesson (Class) banayein
+        // 🎥 NAYA: Cloudinary se aane wala Video URL pakrein
+        let cloudVideoUrl = '';
+        if (req.file) {
+            // Cloudinary upload hone ke baad khud humein ek secure link deta hai jo req.file.path mein hota hai
+            cloudVideoUrl = req.file.path; 
+        }
+
+        // Naya Lesson (Class) banayein
         const newLesson = new Lesson({
-            exercise: exerciseId, // Yoga, Zumba waghaira ki ID
+            exercise: exerciseId,
             day: day,
             timeSlot: timeSlot,
-            date: date
+            date: date,
+            videoUrl: cloudVideoUrl // Cloudinary ka link database mein save kar lo!
         });
 
-        // 4. Database mein save karein
         await newLesson.save();
 
         res.status(201).json({

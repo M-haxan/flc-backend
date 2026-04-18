@@ -19,7 +19,8 @@ const lessonSchema = new mongoose.Schema({
     date: {
         type: Date,
         required: true 
-    }
+    },
+    videoUrl: { type: String, required: false }
 }, { timestamps: true });
 
 const Lesson = mongoose.model('Lesson', lessonSchema);
