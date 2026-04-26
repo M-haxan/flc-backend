@@ -20,6 +20,28 @@ const bookingSchema = new mongoose.Schema({
         type: Date,
         default: null,
         description: "Timestamp when the lesson was marked as complete"
+    },
+    // 💰 PAYMENT TRACKING
+    paymentStatus: {
+        type: String,
+        enum: ['paid', 'refunded', 'retained'],
+        default: 'paid',
+        description: "paid = payment received, refunded = user cancelled early, retained = class expired without completion"
+    },
+    paymentAmount: {
+        type: Number,
+        default: 0,
+        description: "Amount charged for this booking (fetched from exercise price)"
+    },
+    refundedAmount: {
+        type: Number,
+        default: 0,
+        description: "Amount refunded to user (for early cancellations)"
+    },
+    refundedAt: {
+        type: Date,
+        default: null,
+        description: "Timestamp when refund was processed"
     }
 }, { timestamps: true });
 

@@ -115,44 +115,123 @@ router.put('/exercises/:id', protect, async (req, res) => {
     }
 });
 // Route:   GET /api/lessons/reports/attendance
-// Desc:    Get detailed report (Attendance, Rating, Income)
+// Desc:    Get detailed report (Attendance, Rating, Income, Refunds)
 router.get('/reports/attendance', protect, async (req, res) => {
     try {
         if (req.user.role !== 'admin') return res.status(403).json({ message: "Access Denied!" });
 
         const lessons = await Lesson.find().populate('exercise');
         
-        // NAYA: Har exercise ka total paisa jama karne ke liye ek khali object
-        let incomeTracker = {}; 
+        // Track total income for all exercises
+        let totalRevenueTracker = 0;
+        let totalRefundsTracker = 0;
+        let totalRetainedTracker = 0;
 
         const reportData = await Promise.all(lessons.map(async (lesson) => {
             
-            // 1. Bookings & Income calculate karein
-            const allBookings = await Booking.find({ lesson: lesson._id });
+            // 1. Get ALL bookings for this lesson with user details
+            const allBookings = await Booking.find({ lesson: lesson._id })
+                .populate({
+                    path: 'user',
+                    select: 'name email'
+                });
             const bookingCount = allBookings.length;
             const completedCount = allBookings.filter(b => b.isCompleted).length;
-            const classIncome = bookingCount * lesson.exercise.price; // Paise = Log * Ticket Price
             
-            // Income Tracker mein is exercise ke paise daal dein
-            const exName = lesson.exercise.name;
-            if (!incomeTracker[exName]) incomeTracker[exName] = 0;
-            incomeTracker[exName] += classIncome;
+            // 2. Calculate Revenue Details
+            // Total Revenue = all bookings that are marked as paid or retained
+            const paidBookings = allBookings.filter(b => b.paymentStatus === 'paid' || b.paymentStatus === 'retained');
+            const totalRevenue = paidBookings.reduce((sum, b) => sum + (b.paymentAmount || 0), 0);
+            
+            // Refunds Given
+            const refundedBookings = allBookings.filter(b => b.paymentStatus === 'refunded');
+            const totalRefunds = refundedBookings.reduce((sum, b) => sum + (b.refundedAmount || 0), 0);
+            
+            // Amount Retained from Expired Classes (not completed, time passed)
+            // We'll mark these as 'retained' when reporting expired
+            let totalRetained = 0;
+            
+            // Recalculate retained: bookings that are paid but not completed and class time has passed
+            const hasExpired = (lessonDate, timeSlot) => {
+                const now = new Date();
+                const classDate = new Date(lessonDate);
+                const currentHour = now.getHours();
+                
+                const isSameDay = now.getFullYear() === classDate.getFullYear() &&
+                                now.getMonth() === classDate.getMonth() &&
+                                now.getDate() === classDate.getDate();
+                
+                if (isSameDay) {
+                    if (timeSlot === 'Morning' && currentHour >= 11) return true;
+                    if (timeSlot === 'Afternoon' && currentHour >= 15) return true;
+                    if (timeSlot === 'Evening' && currentHour >= 19) return true;
+                    return false;
+                }
+                
+                if (now > classDate) return true;
+                return false;
+            };
+            
+            if (hasExpired(lesson.date, lesson.timeSlot)) {
+                const expiredNotCompleted = allBookings.filter(b => 
+                    (b.paymentStatus === 'paid' || b.paymentStatus === null) && !b.isCompleted
+                );
+                
+                // Mark these bookings as 'retained' in the database
+                for (const booking of expiredNotCompleted) {
+                    if (booking.paymentStatus !== 'retained') {
+                        await Booking.findByIdAndUpdate(booking._id, {
+                            paymentStatus: 'retained'
+                        });
+                    }
+                }
+                
+                totalRetained = expiredNotCompleted.reduce((sum, b) => sum + (b.paymentAmount || 0), 0);
+            }
+            
+            // Add to totals
+            totalRevenueTracker += totalRevenue;
+            totalRefundsTracker += totalRefunds;
+            totalRetainedTracker += totalRetained;
 
-            // 2. Reviews & Average Rating nikalen
+            // 3. Reviews & Average Rating
             const reviews = await Review.find({ lesson: lesson._id });
             let avgRating = 0;
             if (reviews.length > 0) {
-                // Saare stars ko plus karo
                 const totalStars = reviews.reduce((sum, rev) => sum + rev.rating, 0);
-                // Total stars ko reviews ki tadad se divide kar do
                 avgRating = (totalStars / reviews.length).toFixed(1); 
             }
 
-            // 3. Calculate Completion Percentage
+            // 4. Calculate Completion Percentage
             let completionPercentage = 0;
-            if (bookingCount > 0) {
-                completionPercentage = ((completedCount / bookingCount) * 100).toFixed(1);
+            if (completedCount > 0) {
+                // 100% = jab 4 log class complete kar ley
+                completionPercentage = Math.min(((completedCount / 4) * 100).toFixed(1), 100);
             }
+
+            // 5. User Details Breakdown
+            const bookedUsers = allBookings
+                .filter(b => b.paymentStatus === 'paid' || b.paymentStatus === 'retained')
+                .map(b => ({
+                    name: b.user?.name || 'Unknown',
+                    email: b.user?.email || 'N/A',
+                    status: b.isCompleted ? 'Completed' : 'Booked',
+                    paymentAmount: b.paymentAmount
+                }));
+
+            const refundedUsers = refundedBookings.map(b => ({
+                name: b.user?.name || 'Unknown',
+                email: b.user?.email || 'N/A',
+                refundAmount: b.refundedAmount
+            }));
+
+            const completedUsers = allBookings
+                .filter(b => b.isCompleted)
+                .map(b => ({
+                    name: b.user?.name || 'Unknown',
+                    email: b.user?.email || 'N/A',
+                    completedAt: b.completedAt
+                }));
 
             return {
                 lessonId: lesson._id,
@@ -165,23 +244,30 @@ router.get('/reports/attendance', protect, async (req, res) => {
                 totalSeats: 4,
                 completionPercentage: completionPercentage,
                 status: bookingCount >= 4 ? 'Full' : 'Available',
-                avgRating: avgRating, // Nayi Field
-                income: classIncome   // Nayi Field
+                avgRating: avgRating,
+                // 💰 Revenue Breakdown
+                totalRevenue: totalRevenue,
+                refundsGiven: totalRefunds,
+                retainedFromExpired: totalRetained,
+                netRevenue: totalRevenue - totalRefunds,
+                // 👥 User Details
+                bookedUsers: bookedUsers,
+                refundedUsers: refundedUsers,
+                completedUsers: completedUsers
             };
         }));
 
-        // 3. Highest Income Generator dhoondein (Sabse zyada paise kisne kamaye?)
-        let topEarner = { name: 'No Data', income: 0 };
-        for (const [name, amount] of Object.entries(incomeTracker)) {
-            if (amount > topEarner.income) {
-                topEarner = { name: name, income: amount };
-            }
-        }
+        // Calculate Net Total Revenue
+        const netTotalRevenue = totalRevenueTracker - totalRefundsTracker;
 
         // Frontend ko saara data ek package mein bhej dein
         res.status(200).json({
             classesReport: reportData,
-            highestEarner: topEarner
+            // Summary for all classes
+            totalRevenue: totalRevenueTracker,
+            totalRefunds: totalRefundsTracker,
+            totalRetained: totalRetainedTracker,
+            netRevenue: netTotalRevenue
         });
 
     } catch (error) {
